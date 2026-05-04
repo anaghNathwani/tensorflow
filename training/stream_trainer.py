@@ -81,12 +81,15 @@ class StreamTrainer:
             self.ckpt, str(self.output_dir / "ckpts"), max_to_keep=3
         )
 
-        # Resume if checkpoint exists
+        # Resume if checkpoint exists and shapes match
         latest = self.ckpt_mgr.latest_checkpoint
         if latest:
-            self.ckpt.restore(latest).expect_partial()
-            self.global_step = int(self.ckpt.step)
-            print(f"  Resumed from step {self.global_step}")
+            try:
+                self.ckpt.restore(latest).expect_partial()
+                self.global_step = int(self.ckpt.step)
+                print(f"  Resumed from step {self.global_step}")
+            except ValueError:
+                print(f"  Checkpoint shape mismatch — starting fresh for this model size.")
 
         params = self.model.count_params()
         print(f"  Model: {params/1e6:.1f}M parameters")

@@ -56,8 +56,13 @@ def format_duration(seconds: int) -> str:
 def parse_detail(s: str) -> str:
     """Normalise detail arg to 'low' / 'medium' / 'high'."""
     s = s.strip().lower()
-    if s in ("low", "medium", "high"):
-        return s
+    _ALIASES = {
+        "low": "low", "min": "low", "light": "low", "easy": "low", "basic": "low",
+        "medium": "medium", "mid": "medium", "normal": "medium", "standard": "medium",
+        "high": "high", "heavy": "high", "max": "high", "deep": "high", "full": "high",
+    }
+    if s in _ALIASES:
+        return _ALIASES[s]
     try:
         n = int(s)
         if n <= 3:  return "low"
@@ -66,7 +71,7 @@ def parse_detail(s: str) -> str:
     except ValueError:
         pass
     print(f"ERROR: Cannot parse detail level '{s}'")
-    print("Use: low / medium / high  or  1-10")
+    print("Use: low / medium / high  (or aliases: min, mid, max, light, heavy, deep)")
     sys.exit(1)
 
 
