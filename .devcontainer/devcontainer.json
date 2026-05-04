@@ -1,0 +1,46 @@
+{
+  "name": "TensorFlow LLM",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+
+  "features": {
+    "ghcr.io/devcontainers/features/nvidia-cuda:1": {
+      "installCudnn": true,
+      "cudaVersion": "12.3",
+      "cudnnVersion": "9"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "runArgs": [
+    "--gpus=all",
+    "--shm-size=16g"
+  ],
+
+  "postCreateCommand": "pip install --upgrade pip && pip install -r requirements-codespaces.txt",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "github.copilot"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "python.formatting.provider": "black"
+      }
+    }
+  },
+
+  "remoteEnv": {
+    "TF_CPP_MIN_LOG_LEVEL": "2",
+    "PYTHONPATH": "/workspaces/${localWorkspaceFolderBasename}"
+  },
+
+  "forwardPorts": [6006],
+  "portsAttributes": {
+    "6006": { "label": "TensorBoard", "onAutoForward": "openBrowser" }
+  }
+}

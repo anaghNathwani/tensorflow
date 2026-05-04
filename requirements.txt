@@ -1,0 +1,21 @@
+# Core — tensorflow-macos was merged into tensorflow as of TF 2.13
+# tensorflow-metal (Apple GPU backend) must be installed separately via Apple's index:
+#   pip install tensorflow-metal --extra-index-url https://pypi.apple.com/simple
+tensorflow>=2.16.0
+
+# For Linux/Codespaces with NVIDIA GPU (uncomment):
+# tensorflow[and-cuda]>=2.16.0
+
+transformers>=4.40.0
+datasets>=2.19.0
+tokenizers>=0.19.0
+numpy>=1.26.0
+scipy>=1.13.0
+tqdm>=4.66.0
+
+# Optional: experiment tracking + TensorBoard
+tensorboard>=2.16.0
+wandb>=0.17.0
+
+# Optional: faster tokenization
+sentencepiece>=0.2.0
