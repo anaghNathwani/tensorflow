@@ -29,6 +29,11 @@ sys.path.insert(0, os.path.dirname(__file__))
 def parse_duration(s: str) -> int:
     """Parse a human duration string into seconds. e.g. '1h30m' -> 5400"""
     s = s.strip().lower()
+    # Normalise unit words before single-char matching
+    s = re.sub(r"mins?", "m", s)
+    s = re.sub(r"hours?", "h", s)
+    s = re.sub(r"days?",  "d", s)
+    s = re.sub(r"secs?|seconds?", "s", s)
     total = 0
     for value, unit in re.findall(r"(\d+(?:\.\d+)?)\s*([smhd])", s):
         v = float(value)
