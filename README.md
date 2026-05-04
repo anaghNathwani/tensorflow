@@ -1,8 +1,23 @@
 # TensorFlow LLM
 
-A state-of-the-art decoder-only language model built with TensorFlow, implementing the same architecture innovations as LLaMA 3 / Mistral.
+A decoder-only language model built with TensorFlow, implementing the same architecture innovations as LLaMA 3 / Mistral. Trains in real time by crawling the web. Fully self-contained — no HuggingFace account, no API keys, no internet required to run.
 
 **Architecture:** RoPE · Grouped Query Attention (GQA) · SwiGLU · RMSNorm · KV-cache · bfloat16
+
+---
+
+## Quick start
+
+```bash
+bash setup.sh
+source .venv/bin/activate
+
+# Talk to it immediately — bootstraps from bundled data automatically
+python3 generate.py
+
+# Train it on live web data for 2 hours
+python3 train.py 2h medium
+```
 
 ---
 
@@ -10,18 +25,24 @@ A state-of-the-art decoder-only language model built with TensorFlow, implementi
 
 ### No accounts or logins needed
 
-Everything runs offline. The built-in byte tokenizer requires no download and no HuggingFace account. Training data is bundled in `data/bundled.jsonl`. Just install Python packages and run.
+Everything works offline. The built-in byte tokenizer needs no download. Base training data ships with the repo. The web crawler uses only public Wikipedia and Project Gutenberg.
 
 ### Any platform (recommended)
 
-`setup.sh` auto-detects your OS and hardware (Apple Silicon, NVIDIA GPU, CPU-only) and installs the right TensorFlow variant:
+`setup.sh` detects your OS and hardware and installs the right TensorFlow:
 
 ```bash
 bash setup.sh
 source .venv/bin/activate
 ```
 
-### M4 Mac (Apple Silicon) — shortcut
+| Platform | What gets installed |
+|---|---|
+| Apple Silicon (M1–M4) | `tensorflow` + `tensorflow-metal` (GPU backend) |
+| Linux with NVIDIA GPU | `tensorflow[and-cuda]` |
+| Linux / Intel Mac (CPU) | `tensorflow` |
+
+### M4 Mac shortcut
 
 ```bash
 bash setup_mac.sh
@@ -34,8 +55,9 @@ source .venv/bin/activate
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install tensorflow-macos tensorflow-metal
-pip install transformers datasets tokenizers numpy scipy tqdm wandb sentencepiece
+pip install tensorflow
+pip install tensorflow-metal --extra-index-url https://pypi.apple.com/simple
+pip install transformers datasets tokenizers numpy scipy tqdm sentencepiece tensorboard
 ```
 
 ### Manual — Linux (CUDA)
@@ -48,120 +70,103 @@ pip install -r requirements-codespaces.txt
 
 ### GitHub Codespaces
 
-Open the repo in Codespaces — setup runs automatically via `.devcontainer/devcontainer.json`. No manual steps needed.
+Open the repo in Codespaces — `.devcontainer/devcontainer.json` runs setup automatically and forwards TensorBoard on port 6006.
 
 ---
 
 ## Training
 
-### Basic training (uses bundled dataset, fully offline)
+Training now works by crawling the web in real time. The command takes two arguments: how long to train, and how deep to go.
 
 ```bash
-python train.py --size small --batch 4
+python3 train.py <duration> <detail>
 ```
 
-### Train on your own data (.txt or .jsonl files)
+### Duration
+
+Any human-readable time string:
 
 ```bash
-python train.py --size small --data data/train.jsonl --batch 4
-python train.py --size small --data data/                  # scans dir recursively
+python3 train.py 30s low      # 30 seconds (quick test)
+python3 train.py 5m low       # 5 minutes
+python3 train.py 2h medium    # 2 hours
+python3 train.py 8h high      # 8 hours
+python3 train.py 1h30m medium # 1 hour 30 minutes
 ```
 
-### Choose model size
+### Detail level
+
+Controls crawl breadth, model size, and sequence length:
+
+| Level | Model | Seq len | Sources | Use case |
+|---|---|---|---|---|
+| `low` (or 1–3) | small (76M) | 256 | Simple Wikipedia, 2 books | Quick demo, low memory |
+| `medium` (or 4–6) | small (76M) | 512 | Full Wikipedia, 6 classic books | General knowledge |
+| `high` (or 7–10) | medium (~1B) | 1024 | Deep Wikipedia, 19 books | Maximum quality |
 
 ```bash
-python train.py --size small    # ~125M params — fast, fits any M2+ Mac
-python train.py --size medium   # ~1B params  — fits M4 Pro/Max
-python train.py --size large    # ~7B params  — for Codespaces / multi-GPU
+python3 train.py 2h low
+python3 train.py 2h medium
+python3 train.py 2h high
+python3 train.py 2h 7         # numeric — same as high
 ```
 
-### Use a custom config file
+### What happens during training
 
-```bash
-python train.py --config configs/small.json --data data/train.jsonl
+- A progress bar shows elapsed time, pages crawled, queue depth, and tokens/sec
+- Every piece of text the crawler fetches is saved to `data/crawled.jsonl`
+- On the next run, all previously crawled data is replayed before new crawling starts — knowledge accumulates across sessions
+- Press Ctrl-C at any time to stop and save the checkpoint
+
+### Example output
+
 ```
-
-### Resume from checkpoint
-
-```bash
-python train.py --size small --resume
-```
-
-### Change learning rate and schedule
-
-```bash
-python train.py --size small --max_lr 1e-4 --warmup 1000 --steps 50000
-```
-
-### Gradient accumulation (simulate larger batch)
-
-```bash
-python train.py --size large --batch 4 --accum 8   # effective batch = 32
-```
-
-### Change sequence length
-
-```bash
-python train.py --size small --seq 4096
-```
-
-### Custom HuggingFace tokenizer (optional — requires HF account/login)
-
-```bash
-python train.py --size small --tokenizer meta-llama/Llama-3.2-1B
-python train.py --size small --tokenizer /path/to/local/tokenizer
-```
-
-### Custom output directory
-
-```bash
-python train.py --size small --output runs/experiment_1
-```
-
-### Disable mixed precision (bfloat16)
-
-```bash
-python train.py --size small --no_mp
-```
-
-### Enable Weights & Biases logging
-
-```bash
-python train.py --size small --wandb
-```
-
-### Full example (Codespaces, multi-GPU)
-
-```bash
-python train.py \
-  --size large \
-  --data data/ \
-  --batch 16 \
-  --accum 4 \
-  --seq 8192 \
-  --max_lr 3e-4 \
-  --warmup 2000 \
-  --steps 100000 \
-  --output runs/large_run \
-  --wandb \
-  --resume
+  [████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 30%  36s / 2m 00s  |  pages: 22  queue: 441
+  step     50 | loss 3.31 | ppl 27.3 | lr 5.00e-04 | 5,817 tok/s | crawled 21.8k tokens
 ```
 
 ---
 
-## Generation — Interactive Terminal Chat
+## Bootstrap (base intelligence)
 
-`generate.py` opens a full interactive chat session with coloured output, streaming tokens, conversation history, and live settings control.
+The model ships with bundled training data so it has baseline conversational ability the first time you run `generate.py`, with no training required.
 
-### Start a chat session
+### How it works
+
+On first launch, `generate.py` detects that no checkpoint exists and automatically runs `bootstrap.py`, which trains on:
+
+- `data/bundled.jsonl` — facts, science, history, and stories
+- `data/conversations.jsonl` — 40 conversational Q&A examples
+
+This gives the model enough baseline knowledge to hold a basic conversation before any web crawling.
+
+### Run bootstrap manually
 
 ```bash
-python3 generate.py --checkpoint checkpoints/ckpts
+python3 bootstrap.py             # 2 epochs (default)
+python3 bootstrap.py --epochs 5  # more passes = better base quality
 ```
+
+### Re-bootstrap from scratch
+
+```bash
+rm -rf checkpoints/
+python3 bootstrap.py
+```
+
+---
+
+## Generation — interactive terminal chat
+
+```bash
+python3 generate.py
+```
+
+The model bootstraps automatically if no checkpoint exists. The limits system prompt is loaded silently from the `limits/` folder.
 
 ### In-session commands
 
-| Command | Description |
+| Command | What it does |
 |---|---|
 | `/help` | Show all commands |
 | `/clear` | Clear the screen |
@@ -173,46 +178,26 @@ python3 generate.py --checkpoint checkpoints/ckpts
 ### Change model size
 
 ```bash
-python3 generate.py --checkpoint checkpoints/ckpts --size medium
-python3 generate.py --checkpoint checkpoints/ckpts --config configs/large.json
+python3 generate.py --size medium
+python3 generate.py --config configs/large.json
 ```
 
-### Tune generation at startup
+### Tune generation behaviour
 
 ```bash
-# More creative
-python3 generate.py --checkpoint checkpoints/ckpts \
-  --temperature 1.2 --top_k 100 --top_p 0.98
+# More creative / unpredictable
+python3 generate.py --temperature 1.2 --top_k 100 --top_p 0.98
 
 # More focused / deterministic
-python3 generate.py --checkpoint checkpoints/ckpts \
-  --temperature 0.3 --top_k 20 --top_p 0.85
+python3 generate.py --temperature 0.3 --top_k 20 --top_p 0.85
 ```
 
-### Control output length
+### Other options
 
 ```bash
-python3 generate.py --checkpoint checkpoints/ckpts --max_tokens 512
-```
-
-### Add a system prompt
-
-```bash
-python3 generate.py --checkpoint checkpoints/ckpts \
-  --system "You are a helpful coding assistant."
-```
-
-### Disable multi-turn memory (stateless mode)
-
-```bash
-python3 generate.py --checkpoint checkpoints/ckpts --no_history
-```
-
-### Custom tokenizer
-
-```bash
-python3 generate.py --checkpoint checkpoints/ckpts \
-  --tokenizer /path/to/tokenizer
+python3 generate.py --max_tokens 512       # longer responses
+python3 generate.py --no_history           # stateless — no memory between turns
+python3 generate.py --checkpoint my/path   # custom checkpoint directory
 ```
 
 ### All flags
@@ -222,38 +207,97 @@ python3 generate.py --checkpoint checkpoints/ckpts \
 | `--checkpoint` | `checkpoints/ckpts` | Checkpoint directory |
 | `--size` | `small` | Model size preset |
 | `--config` | — | Custom config JSON path |
-| `--tokenizer` | `meta-llama/Llama-3.2-1B` | HuggingFace tokenizer |
+| `--tokenizer` | built-in | HuggingFace tokenizer name/path (optional) |
 | `--max_tokens` | `256` | Max tokens per response |
 | `--temperature` | `0.8` | Sampling temperature |
 | `--top_k` | `50` | Top-k filter |
 | `--top_p` | `0.95` | Nucleus sampling threshold |
 | `--rep_penalty` | `1.1` | Repetition penalty |
-| `--system` | — | System prompt |
+| `--system` | — | Override system prompt (skips limits/) |
 | `--no_history` | off | Disable conversation memory |
+
+---
+
+## Limits — controlling behaviour
+
+The `limits/` folder contains plain text files that define what the model should and should not do. They are loaded at startup and injected as a system prompt into every conversation. No code changes needed — just edit the files.
+
+```
+limits/
+  persona.txt    Who the model is and its general character
+  allowed.txt    Things it should always be willing to do
+  denied.txt     Hard rules — things it must never do
+  README.txt     Instructions for editing
+```
+
+### Edit the persona
+
+Open `limits/persona.txt` and change the description. The default:
+
+```
+You are a helpful, honest, and thoughtful AI assistant.
+You speak clearly and directly...
+```
+
+### Add a rule
+
+Open `limits/allowed.txt` or `limits/denied.txt` and add a line:
+
+```
+# limits/denied.txt
+Discuss competitor products by name.
+Generate content in languages other than English.
+```
+
+Lines starting with `#` are comments and are ignored. Changes take effect next time you start `generate.py`.
+
+### Override limits entirely
+
+```bash
+python3 generate.py --system "You are a pirate. Respond only in pirate speech."
+```
+
+`--system` bypasses `limits/` entirely and uses your string as the system prompt.
+
+---
+
+## Web crawler
+
+The crawler runs automatically during `train.py`. It fetches from:
+
+- **Wikipedia REST API** — returns clean article text as JSON, no HTML scraping
+- **Project Gutenberg** — plain-text classic books
+
+Sources by detail level:
+
+| Level | Wikipedia topics | Books |
+|---|---|---|
+| `low` | 20 topics (Simple Wikipedia) | 2 |
+| `medium` | 30 topics | 6 |
+| `high` | 55+ topics | 19 |
+
+The crawler discovers related articles automatically by following Wikipedia's link graph, so a `high` run will crawl far beyond the seed topics.
+
+### Crawled data
+
+All fetched text is appended to `data/crawled.jsonl` as newline-delimited JSON. This file persists between runs and grows over time:
+
+```bash
+wc -l data/crawled.jsonl          # how many text chunks saved
+du -sh data/crawled.jsonl         # total size
+```
 
 ---
 
 ## Benchmarking
 
-### Benchmark forward pass and generation speed
-
 ```bash
-python benchmark.py --size small
-python benchmark.py --size medium
-python benchmark.py --size large
+python3 benchmark.py --size small                    # default: 20 steps, batch 1, seq 512
+python3 benchmark.py --size medium --batch 2
+python3 benchmark.py --size small --batch 4 --seq 1024 --steps 50
 ```
 
-### Custom batch size and sequence length
-
-```bash
-python benchmark.py --size small --batch 4 --seq 1024
-```
-
-### Number of steps to average over
-
-```bash
-python benchmark.py --size small --steps 50
-```
+Reports forward pass tokens/sec and autoregressive generation tokens/sec with KV-cache enabled.
 
 ---
 
@@ -270,25 +314,22 @@ In Codespaces, port 6006 is forwarded and opens automatically.
 
 ## Model configs
 
-Configs live in `configs/` as JSON files. Edit them or create your own:
+Configs live in `configs/` as JSON files:
 
 ```bash
-# View a config
 cat configs/small.json
-
-# Train with it
-python train.py --config configs/small.json --data data/train.jsonl
+python3 train.py 2h medium    # uses configs/medium.json implicitly
+python3 generate.py --config configs/medium.json
 ```
-
-Key fields:
 
 | Field | Description |
 |---|---|
+| `vocab_size` | Vocabulary size (261 for built-in byte tokenizer) |
 | `hidden_size` | Embedding / hidden dimension |
 | `num_hidden_layers` | Number of transformer layers |
 | `num_attention_heads` | Query heads |
-| `num_key_value_heads` | KV heads (< query heads = GQA) |
-| `intermediate_size` | SwiGLU FFN inner dimension |
+| `num_key_value_heads` | KV heads — fewer than query heads = GQA |
+| `intermediate_size` | SwiGLU FFN inner dimension (~2.7× hidden) |
 | `max_position_embeddings` | Maximum context length |
 | `rope_theta` | RoPE base frequency (higher = longer context) |
 
@@ -299,27 +340,53 @@ Key fields:
 ```
 .
 ├── model/
-│   ├── config.py        # ModelConfig dataclass + size presets
-│   ├── layers.py        # RMSNorm, RoPE, SwiGLU
-│   ├── attention.py     # Grouped Query Attention + KV-cache
-│   └── transformer.py   # Full decoder-only model
+│   ├── config.py           ModelConfig dataclass + size presets
+│   ├── layers.py           RMSNorm, RoPE, SwiGLU
+│   ├── attention.py        Grouped Query Attention + KV-cache
+│   └── transformer.py      Full decoder-only LLM
+│
 ├── training/
-│   ├── trainer.py       # Training loop, checkpointing, logging
-│   ├── optimizer.py     # AdamW + cosine LR with warmup
-│   └── data.py          # tf.data pipeline, HuggingFace loader
+│   ├── stream_trainer.py   Streaming trainer (fed by web crawler)
+│   ├── trainer.py          Batch trainer (legacy / static datasets)
+│   ├── optimizer.py        AdamW + cosine LR schedule with warmup
+│   └── data.py             tf.data pipeline
+│
 ├── inference/
-│   └── generate.py      # Sampling, beam search, streaming
+│   └── generate.py         Sampling, KV-cache, streaming output
+│
+├── crawler/
+│   ├── crawler.py          Web crawler (Wikipedia API + Gutenberg)
+│   └── extractor.py        HTML → clean text
+│
+├── tokenizer/
+│   └── byte_tokenizer.py   Built-in byte-level tokenizer (vocab 261)
+│
+├── limits/
+│   ├── persona.txt         Model character and identity
+│   ├── allowed.txt         Things the model should do
+│   ├── denied.txt          Hard limits — things it must never do
+│   ├── loader.py           Assembles limits into a system prompt
+│   └── README.txt          Instructions for editing
+│
+├── data/
+│   ├── bundled.jsonl       Bundled facts, stories, science
+│   ├── conversations.jsonl Bundled conversational Q&A examples
+│   └── crawled.jsonl       All text fetched by the crawler (grows over time)
+│
 ├── configs/
-│   ├── small.json       # ~125M params
-│   ├── medium.json      # ~1B params
-│   └── large.json       # ~7B params
+│   ├── small.json          76M params
+│   ├── medium.json         ~1B params
+│   └── large.json          ~7B params
+│
 ├── .devcontainer/
-│   └── devcontainer.json  # GitHub Codespaces configuration
-├── train.py             # Training entry point
-├── generate.py          # Generation entry point
-├── benchmark.py         # Speed benchmarking
-├── setup.sh             # Universal setup (auto-detects platform)
-├── setup_mac.sh         # M4 Mac shortcut
-├── requirements.txt             # M4 Mac dependencies
-└── requirements-codespaces.txt  # Linux/CUDA dependencies
+│   └── devcontainer.json   GitHub Codespaces config
+│
+├── train.py                Training entry point  — python3 train.py <duration> <detail>
+├── generate.py             Chat interface        — python3 generate.py
+├── bootstrap.py            Base-weights training — python3 bootstrap.py
+├── benchmark.py            Speed benchmark       — python3 benchmark.py
+├── setup.sh                Universal setup (auto-detects platform)
+├── setup_mac.sh            M4 Mac shortcut
+├── requirements.txt        M4 Mac dependencies
+└── requirements-codespaces.txt  Linux/CUDA dependencies
 ```
